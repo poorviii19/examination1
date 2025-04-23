@@ -1,48 +1,59 @@
 <?php
 session_start();
 include "connection.php";
+$theme = isset($_SESSION['theme']) ? $_SESSION['theme'] : 'light';
 
 if (!$conn) {
     die("Database connection failed: " . mysqli_connect_error());
-} else {
-    mysqli_set_charset($conn, "utf8mb4");
+}
+mysqli_set_charset($conn, "utf8mb4");
+
+// Uploading image on form submit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['profileImage']) && $_FILES['profileImage']['error'] === UPLOAD_ERR_OK) {
+    $uploadDir = 'uploads/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $uniqueName = uniqid() . '_' . basename($_FILES['profileImage']['name']);
+    $uploadFile = $uploadDir . $uniqueName;
+
+    if (move_uploaded_file($_FILES['profileImage']['tmp_name'], $uploadFile)) {
+        $param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+        $query = "UPDATE users SET profile_image = ? WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("ss", $uploadFile, $param);
+
+        if ($stmt->execute()) {
+            $_SESSION['profile_image'] = $uploadFile;
+            echo "<script>alert('Profile image updated successfully.'); window.location.href = 'profile1.php';</script>";
+            exit;
+        } else {
+            echo "<script>alert('Database update failed.');</script>";
+        }
+        $stmt->close();
+    } else {
+        echo "<script>alert('File upload failed.');</script>";
+    }
 }
 
+// Fetch user info
 $user = null;
+$param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+$query = "SELECT fname, email, enrollment_id, profile_image, phone FROM users WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
 
-if (!empty($_SESSION['enrollment_id']) || !empty($_SESSION['email'])) {
-    if (!empty($_SESSION['enrollment_id'])) {
-        $query = "SELECT fname, email FROM users WHERE enrollment_id = ?";
-        $param = $_SESSION['enrollment_id'];
-    } else {
-        $query = "SELECT fname, email FROM users WHERE email = ?";
-        $param = $_SESSION['email'];
-    }
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $param);
 
-    $stmt = $conn->prepare($query);
-    if ($stmt === false) {
-        die("Query preparation failed: " . $conn->error);
-    }
-
-    $stmt->bind_param("s", $param);
-
-    if (!$stmt->execute()) {
-        die("Query execution failed: " . $stmt->error);
-    }
-
+if ($stmt->execute()) {
     $result = $stmt->get_result();
     if ($result && $result->num_rows > 0) {
         $user = $result->fetch_assoc();
-    } else {
-        echo "<script>alert('No user found for given session data.');</script>";
+        $_SESSION['profile_image'] = $user['profile_image'];
     }
-
-    $stmt->close();
-} else {
-    echo "<script>alert('User session not set.');</script>";
 }
-
-$conn->close();
+$stmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -51,7 +62,7 @@ $conn->close();
   <title>Result Page</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<body class="bg-gray-100 flex items-center justify-center min-h-screen ">
     <nav
         class="flex justify-between h-18 bg-white p-4 text-black shadow-lg text-center text-lg font-semibold fixed w-full top-0 z-10">
         <div class="flex items-center">
@@ -65,9 +76,8 @@ $conn->close();
             <li><a href="contact1.php">Contact</a></li>
         </ul>
         <div class="relative flex items-center text-center">
-            <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown"
-                data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="user-avtar-modified.png"
-                alt="User dropdown">
+        <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown" data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'user-avtar-modified.png'; ?>" alt="User dropdown">
+
                 <p id="userName" name="name"><?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?></p>
 
             <div id="userDropdown"
@@ -82,7 +92,7 @@ $conn->close();
                         class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Profile</a>
                 </div>
                 <div class="py-1 flex justify-center items-center">
-                    <a href="login.php"
+                    <a href="index.php"
                         class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">Logout</a>
                     <img src="logout.png" alt="logout" class="w-6 h-6 ml-2">
                 </div>
@@ -117,7 +127,9 @@ $conn->close();
     <div class="space-y-4 text-gray-700">
       <p><span class="font-semibold">Exam: </span> Physics</p>
       <p><span class="font-semibold">Enrollment ID:</span> STU20250415001</p>
-      <p><span class="font-semibold">Name:</span> XYZ</p>
+    <div class="flex space-x-2">
+      <p id="userName" name="name" class="font-semibold">Name: </p><span><?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?></span>
+    </div>
       <p>
         <span class="font-semibold">Status:</span> 
         <span class="text-green-600 font-bold">Pass</span>

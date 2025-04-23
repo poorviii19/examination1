@@ -133,6 +133,7 @@
 
         function submitTest() {
             alert("Test Submitted!");
+            window.location.href = "Sdashboard.php";
         }
 
         function updatePalette() {

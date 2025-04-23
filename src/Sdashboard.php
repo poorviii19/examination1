@@ -1,48 +1,57 @@
 <?php
 session_start();
 include "connection.php";
-
 if (!$conn) {
     die("Database connection failed: " . mysqli_connect_error());
-} else {
-    mysqli_set_charset($conn, "utf8mb4");
+}
+mysqli_set_charset($conn, "utf8mb4");
+
+// Uploading image on form submit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['profileImage']) && $_FILES['profileImage']['error'] === UPLOAD_ERR_OK) {
+    $uploadDir = 'uploads/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $uniqueName = uniqid() . '_' . basename($_FILES['profileImage']['name']);
+    $uploadFile = $uploadDir . $uniqueName;
+
+    if (move_uploaded_file($_FILES['profileImage']['tmp_name'], $uploadFile)) {
+        $param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+        $query = "UPDATE users SET profile_image = ? WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("ss", $uploadFile, $param);
+
+        if ($stmt->execute()) {
+            $_SESSION['profile_image'] = $uploadFile;
+            echo "<script>alert('Profile image updated successfully.'); window.location.href = 'profile1.php';</script>";
+            exit;
+        } else {
+            echo "<script>alert('Database update failed.');</script>";
+        }
+        $stmt->close();
+    } else {
+        echo "<script>alert('File upload failed.');</script>";
+    }
 }
 
+// Fetch user info
 $user = null;
+$param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+$query = "SELECT fname, email, enrollment_id, profile_image, phone FROM users WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
 
-if (!empty($_SESSION['enrollment_id']) || !empty($_SESSION['email'])) {
-    if (!empty($_SESSION['enrollment_id'])) {
-        $query = "SELECT fname, email FROM users WHERE enrollment_id = ?";
-        $param = $_SESSION['enrollment_id'];
-    } else {
-        $query = "SELECT fname, email FROM users WHERE email = ?";
-        $param = $_SESSION['email'];
-    }
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $param);
 
-    $stmt = $conn->prepare($query);
-    if ($stmt === false) {
-        die("Query preparation failed: " . $conn->error);
-    }
-
-    $stmt->bind_param("s", $param);
-
-    if (!$stmt->execute()) {
-        die("Query execution failed: " . $stmt->error);
-    }
-
+if ($stmt->execute()) {
     $result = $stmt->get_result();
     if ($result && $result->num_rows > 0) {
         $user = $result->fetch_assoc();
-    } else {
-        echo "<script>alert('No user found for given session data.');</script>";
+        $_SESSION['profile_image'] = $user['profile_image'];
     }
-
-    $stmt->close();
-} else {
-    echo "<script>alert('User session not set.');</script>";
 }
-
-$conn->close();
+$stmt->close();
 ?>
 
 <!DOCTYPE html>
@@ -59,10 +68,8 @@ $conn->close();
         }
     </style>
 </head>
-
-<body class="bg-gray-100">
-
-    <!-- Navbar -->
+<body class=" bg-gray-100">
+        <!-- Navbar -->
     <nav
         class="flex justify-between h-18 bg-white p-4 text-black shadow-lg text-center text-lg font-semibold fixed w-full">
         <div class="flex items-center">
@@ -75,10 +82,9 @@ $conn->close();
             <li><a href="result.php">Results</a></li>
             <li><a href="contact1.php">Contact</a></li>
         </ul>
+        
         <div class="relative flex items-center text-center">
-            <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown"
-                data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="user-avtar-modified.png"
-                alt="User dropdown">
+        <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown" data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'user-avtar-modified.png'; ?>" alt="User dropdown"> 
             <p id="userName" name="name"><?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?></p>
             <div id="userDropdown"
                 class="z-10 hidden absolute mt-55 mr-10 right-0 bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700 dark:divide-gray-600">
@@ -92,7 +98,7 @@ $conn->close();
                         class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Profile</a>
                 </div>
                 <div class="py-1 flex justify-center items-center">
-                    <a href="login.php"
+                    <a href="index.php"
                         class="block px-8 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">Logout</a>
                     <img src="logout.png" alt="logout" class="w-6 h-6 ml-2">
                 </div>
@@ -133,21 +139,21 @@ $conn->close();
                         <p class="text-gray-600 mt-2">Duration: 3 Hours</p>
                         <p class="text-gray-600 mt-1">Subjects: Physics, Chemistry, Mathematics</p>
                         <p class="text-gray-600 mt-2">Level: Undergraduate</p>
-                        <button type="submit" class="mt-5 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer" ><a href="testingpreview.php">Start Exam</a></button>
+                        <button type="submit" class="mt-5 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer" ><a href="t_c.php">Start Exam</a></button>
                     </div>
                     <div class="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition">
                         <h3 class="text-xl font-semibold text-gray-800">JEE Advanced</h3>
                         <p class="text-gray-600 mt-2">Duration: 3 Hours</p>
                         <p class="text-gray-600 mt-1">Subjects: Physics, Chemistry, Mathematics</p>
                         <p class="text-gray-600 mt-1">Level: Undergraduate</p>
-                        <button class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer"><a href="testingpreview.php">Start Exam</a></button>
+                        <button class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer"><a href="t_c.php">Start Exam</a></button>
                     </div>
                     <div class="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transition">
                         <h3 class="text-xl font-semibold text-gray-800">SSC CGL</h3>
                         <p class="text-gray-600 mt-2">Duration: 2 Hours</p>
                         <p class="text-gray-600 mt-1">Subjects: General Awareness, Quantitative Aptitude, English</p>
                         <p class="text-gray-600 mt-1">Level: Graduate</p>
-                        <button class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer"><a href="testingpreview.php">Start Exam</a></button>
+                        <button class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer"><a href="t_c.php">Start Exam</a></button>
                     </div>
                 </div>
             </section>
@@ -260,7 +266,8 @@ $conn->close();
     });
 }
 
-        function renderCalendar() {
+
+function renderCalendar() {
             calendarGrid.innerHTML = "";
             const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
             const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
@@ -339,6 +346,7 @@ $conn->close();
     </footer>
     </div>
     </footer>
+  
 
 </body>
 

@@ -4,45 +4,55 @@ include "connection.php";
 
 if (!$conn) {
     die("Database connection failed: " . mysqli_connect_error());
-} else {
-    mysqli_set_charset($conn, "utf8mb4");
+}
+mysqli_set_charset($conn, "utf8mb4");
+
+// Uploading image on form submit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['profileImage']) && $_FILES['profileImage']['error'] === UPLOAD_ERR_OK) {
+    $uploadDir = 'uploads/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $uniqueName = uniqid() . '_' . basename($_FILES['profileImage']['name']);
+    $uploadFile = $uploadDir . $uniqueName;
+
+    if (move_uploaded_file($_FILES['profileImage']['tmp_name'], $uploadFile)) {
+        $param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+        $query = "UPDATE users SET profile_image = ? WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("ss", $uploadFile, $param);
+
+        if ($stmt->execute()) {
+            $_SESSION['profile_image'] = $uploadFile;
+            echo "<script>alert('Profile image updated successfully.'); window.location.href = 'profile.php';</script>";
+            exit;
+        } else {
+            echo "<script>alert('Database update failed.');</script>";
+        }
+        $stmt->close();
+    } else {
+        echo "<script>alert('File upload failed.');</script>";
+    }
 }
 
+// Fetch user info
 $user = null;
+$param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+$query = "SELECT fname, email, enrollment_id, profile_image, phone FROM users WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
 
-if (!empty($_SESSION['enrollment_id']) || !empty($_SESSION['email'])) {
-    if (!empty($_SESSION['enrollment_id'])) {
-        $query = "SELECT fname, email FROM users WHERE enrollment_id = ?";
-        $param = $_SESSION['enrollment_id'];
-    } else {
-        $query = "SELECT fname, email FROM users WHERE email = ?";
-        $param = $_SESSION['email'];
-    }
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $param);
 
-    $stmt = $conn->prepare($query);
-    if ($stmt === false) {
-        die("Query preparation failed: " . $conn->error);
-    }
-
-    $stmt->bind_param("s", $param);
-
-    if (!$stmt->execute()) {
-        die("Query execution failed: " . $stmt->error);
-    }
-
+if ($stmt->execute()) {
     $result = $stmt->get_result();
     if ($result && $result->num_rows > 0) {
         $user = $result->fetch_assoc();
-    } else {
-        echo "<script>alert('No user found for given session data.');</script>";
+        $_SESSION['profile_image'] = $user['profile_image'];
     }
-
-    $stmt->close();
-} else {
-    echo "<script>alert('User session not set.');</script>";
 }
-
-$conn->close();
+$stmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -130,13 +140,11 @@ window.onload = updateStreak;
         <ul class="flex justify-center items-center space-x-10">
             <li><a href="Tdashboard.php">Home</a></li>
             <li><a href="test_design.php">Test Design</a></li>
-            <li><a href="#">Results</a></li>
             <li><a href="contact.php">Contact</a></li>
         </ul>
         <div class="relative flex items-center text-center">
-            <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown"
-                data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="user-avtar-modified.png"
-                alt="User dropdown">
+        <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown" data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'user-avtar-modified.png'; ?>" alt="User dropdown">            
+
                 <p id="userName" name="name"><?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?></p>
 
             <div id="userDropdown"
@@ -151,7 +159,7 @@ window.onload = updateStreak;
                         class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Profile</a>
                 </div>
                 <div class="py-1 flex justify-center items-center">
-                    <a href="login.php"
+                    <a href="index.php"
                         class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">Logout</a>
                     <img src="logout.png" alt="logout" class="w-6 h-6 ml-2">
                 </div>
@@ -186,44 +194,62 @@ window.onload = updateStreak;
         <body>
             <div class="flex ">
 
-                <div
-                    class=" transition-transform duration-300 hover:scale-105 hover:z-10  ml-15 mt-10 rounded-xl border-white border-2 shadow-2xl shadow-gray-400 h-[14cm] w-[10cm] ">
-                    <a href="abc" class="text-lg text-blue-800 font-bold flex justify-end mr-5 mt-5 hover:underline">Edit</a>
-                    <div class="pl-[3cm]">
-                        <img src="User.png" class="rounded-full mt-4 size-35 ring-3 ring-gray-300 mb-4">
-                        <label class="text-sm cursor-pointer bg-blue-500 text-white px-2 py-2 ml-5 relative rounded-md hover:bg-blue-600">
-                            Upload Image
-                            <input type="file" id="imageUpload" accept="image/*" class="hidden">
-                          </label>
-                    </div>
-                    <br>
-                    <div class="font-bold text-xl text-center">
-                    <p id="userName" name="name"><?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?></p>
-                    <br>
-                    </div>
-                    <div class="text-center">
-                        Student at XYZ University<br>
-                    </div>
-                    <div class="flex space-x-2 ml-23 mt-5">
-                        <img src="identity.png" class="size-5">
-                        <p>Enrollment ID:1235639</p>
-                       
-                    </div>
-                   
-                        <div class="flex space-x-2 pl-23 mt-5">
-                            <img src="phone-call.png" class="size-5">
-                            <p class="text-center">Mob: +9194*****61</p>
-                        </div>
-                        <div class="flex space-x-2 pl-23 mt-5">
-                            <img src="email.png" class="size-5">
-                            <p class="text-center">Email: amrit@gmail.com</p>
-                        </div>
-                        <div class="flex space-x-2 pl-23 mt-5">
-                            <img src="calendar.png" class="size-5">
-                            <p class="text-center">DOB: 07-04-2004</p>
-                        </div>
-                    <br>
+            <div class=" transition-transform duration-300 hover:scale-105 hover:z-10  ml-15 mt-10 rounded-xl border-white border-2 shadow-2xl shadow-gray-400 h-[14cm] w-[10cm] ">
                     
+                    <div class="pl-[3cm]">
+                        <!-- Profile Image Display -->
+                        <img id="profileImage"
+                            src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'default-profile.png'; ?>"
+                            class="rounded-full mt-4 size-35 ring-3 ring-gray-300 mb-4" alt="">
+
+                        <!-- Working Upload Form -->
+                        <form action="profile.php" method="POST" enctype="multipart/form-data">
+                            <label
+                                class="text-sm cursor-pointer bg-blue-500 text-white px-2 py-2 ml-5 relative rounded-md hover:bg-blue-600">
+                                Upload Image
+                                <input type="file" name="profileImage" accept="image/*" class="hidden"
+                                    onchange="this.form.submit()">
+                            </label>
+                        </form>
+                    </div>
+                    <br>
+                    <div class="font-bold text-xl mt-5 text-center">
+                        <p id="userName" name="name">
+                            <?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?>
+                        </p>
+                        <br>
+                    </div>
+                    <div class="ml-15 mt-2">
+                        <div class="flex space-x-2">
+                            <img src="University.png" class="size-5">
+                            Teacher at XYZ University<br>
+                        </div>
+                        <div class="flex space-x-2 mt-5">
+                            <img src="identity.png" class="size-5">
+                            <p>Enrollment ID:
+                                <?php echo isset($user) ? htmlspecialchars($_SESSION['enrollment_id'], ENT_QUOTES, 'UTF-8') : 'N/A'; ?>
+                            </p>
+
+                        </div>
+
+                        <div class="flex space-x-2  mt-5">
+                            <img src="phone-call.png" class="size-5">
+                            <p class="text-center">Mob: 
+                                <?php echo isset($user) ? htmlspecialchars($user['phone'], ENT_QUOTES, 'UTF-8') : 'N/A'; ?>
+                            </p>
+                        </div>
+                        <div class="flex space-x-2  mt-5">
+                            <img src="email.png" class="size-5">
+                            <p class="text-center">Email: 
+                                <?php echo isset($user) ? htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8') : 'N/A'; ?>
+                            </p>
+                        </div>
+                        <div class="flex space-x-2  mt-5">
+                            <img src="calendar.png" class="size-5">
+                            <p class="text-center">DOB: 06-10-2000</p>
+                        </div>
+                        <br>
+                    </div>
 
                 </div>
                 <div>
@@ -232,11 +258,11 @@ window.onload = updateStreak;
                         class="border-white border-1 transition-transform duration-300 hover:scale-105 hover:z-10 shadow-2xl shadow-gray-400 rounded-xl ml-8 mt-10 h-20 w-205 pl-10 pt-6 font-semibold">
                        
                         <div class="flex space-x-15">
-                            <a href="apnacademic.php" class="text-sm">Previously Created Tests</a>
-                            <a href="apnadoc.php" class="text-sm">Documents & Certificates</a>
-                            <a href="examhistory.php" class="text-sm">Result History</a>
+                            <a href="" class="text-sm">Previously Created Tests</a>
+                            <a href="" class="text-sm">Documents & Certificates</a>
+                            <a href="" class="text-sm">Result History</a>
                             <div class="flex space-x-2">
-                                <a href="settings.php" class="text-sm">Preference & Settings</a>
+                                <a href="" class="text-sm">Preference & Settings</a>
                                 <img src="settings.png" onclick="" class="size-5">
                             </div>
                         </div>

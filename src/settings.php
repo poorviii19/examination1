@@ -87,15 +87,14 @@ window.onload = updateStreak;
             <h1 class="pl-2">XamXpress</h1>
         </div>
         <ul class="flex justify-center items-center space-x-10">
-            <li><a href="Sdashboard.php">Home</a></li>
-            <li><a href="Test_Select.php">Mock Test</a></li>
+            <li><a href="Tdashboard.php">Home</a></li>
+            <li><a href="Test_Select.php">Test Design</a></li>
             <li><a href="#">Results</a></li>
             <li><a href="contact.php">Contact</a></li>
         </ul>
         <div class="relative flex items-center text-center">
-            <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown"
-                data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="Logo.png"
-                alt="User dropdown">
+        <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown" data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'user-avtar-modified.png'; ?>" alt="User dropdown">
+
             <p id="userName">Amrit Raj</p>
             <div id="userDropdown"
                 class="z-10 hidden absolute mt-55 mr-10 right-0 bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700 dark:divide-gray-600">

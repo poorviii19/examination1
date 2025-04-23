@@ -1,4 +1,60 @@
+<?php
+session_start();
+include "connection.php";
+$theme = isset($_SESSION['theme']) ? $_SESSION['theme'] : 'light';
 
+if (!$conn) {
+    die("Database connection failed: " . mysqli_connect_error());
+}
+mysqli_set_charset($conn, "utf8mb4");
+
+// Uploading image on form submit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['profileImage']) && $_FILES['profileImage']['error'] === UPLOAD_ERR_OK) {
+    $uploadDir = 'uploads/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $uniqueName = uniqid() . '_' . basename($_FILES['profileImage']['name']);
+    $uploadFile = $uploadDir . $uniqueName;
+
+    if (move_uploaded_file($_FILES['profileImage']['tmp_name'], $uploadFile)) {
+        $param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+        $query = "UPDATE users SET profile_image = ? WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("ss", $uploadFile, $param);
+
+        if ($stmt->execute()) {
+            $_SESSION['profile_image'] = $uploadFile;
+            echo "<script>alert('Profile image updated successfully.'); window.location.href = 'profile1.php';</script>";
+            exit;
+        } else {
+            echo "<script>alert('Database update failed.');</script>";
+        }
+        $stmt->close();
+    } else {
+        echo "<script>alert('File upload failed.');</script>";
+    }
+}
+
+// Fetch user info
+$user = null;
+$param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+$query = "SELECT fname, email, enrollment_id, profile_image, phone FROM users WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $param);
+
+if ($stmt->execute()) {
+    $result = $stmt->get_result();
+    if ($result && $result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        $_SESSION['profile_image'] = $user['profile_image'];
+    }
+}
+$stmt->close();
+?>
 <!DOCTYPE html>
 <html lang="hi">
 <head>

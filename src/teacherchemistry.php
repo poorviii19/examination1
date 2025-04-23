@@ -1,3 +1,29 @@
+<?php
+session_start();
+include "connection.php";
+
+if (!$conn) {
+    die("Database connection failed: " . mysqli_connect_error());
+}
+mysqli_set_charset($conn, "utf8mb4");
+
+// Fetch user info
+$user = null;
+$param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+$query = "SELECT fname, email, profile_image FROM users WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $param);
+
+if ($stmt->execute()) {
+    $result = $stmt->get_result();
+    if ($result && $result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        $_SESSION['profile_image'] = $user['profile_image'];
+    }
+}
+$stmt->close();
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -20,9 +46,10 @@
             <img src="Logo.png" alt="Website Logo" class="w-12 h-12 rounded-full">
             <p class="text-lg mt-1 font-medium ml-3">XampXpress</p>
         </div>
-        <div class="flex items-center">
-            <img src="My Pic.jpg" alt="Profile" class="w-10 h-10 ring-2 ring-white border-white">
-            <p class="text-lg mt-1 font-medium ml-3">Student Name</p>
+        <div class="flex items-center space-x-2">
+            <img src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'user-avtar-modified.png'; ?>" alt="Profile" class="w-10 h-10">
+            <p id="userName" name="name"><?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?></p>
+
         </div>
     </div>
 
@@ -196,6 +223,7 @@ function loadQuestion() {
 
         function submitTest() {
             alert("Test Submitted!");
+            window.location.href = "Sdashboard.php";
         }
 
         function updatePalette() {

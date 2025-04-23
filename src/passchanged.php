@@ -1,3 +1,29 @@
+<?php
+session_start();
+include "connection.php";
+$conn = mysqli_connect($servername, $username, $password, $dbname);
+//To change the password of the user
+if (!$conn) {
+    die("Database connection failed: " . mysqli_connect_error());
+} else {
+    mysqli_set_charset($conn, "utf8mb4");
+}
+
+$email = $_SESSION['email'] ?? null;
+if (isset($_SESSION['enrollment_id'])) {
+    $enrollment_id = $_SESSION['enrollment_id'];
+} else {
+    $enrollment_id = null;
+}
+$enrollment_id = $_SESSION['enrollment_id'] ?? null;
+// redirect the user to login page afeter 3 seconds
+if (isset($_SESSION['email']) || isset($_SESSION['enrollment_id'])) {
+    header("refresh:2;url=index.php");
+} else {
+    header("Location: login.php");
+}
+
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>

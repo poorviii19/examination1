@@ -1,3 +1,65 @@
+<?php
+session_start();
+include "connection.php";
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['theme'])) {
+    $theme = $_POST['theme'];
+    $_SESSION['theme'] = ($theme === 'dark') ? 'dark' : 'light';
+    echo 'Theme updated';
+    exit;
+}
+$theme = isset($_SESSION['theme']) ? $_SESSION['theme'] : 'light';
+if (!$conn) {
+    die("Database connection failed: " . mysqli_connect_error());
+}
+mysqli_set_charset($conn, "utf8mb4");
+
+// Uploading image on form submit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['profileImage']) && $_FILES['profileImage']['error'] === UPLOAD_ERR_OK) {
+    $uploadDir = 'uploads/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $uniqueName = uniqid() . '_' . basename($_FILES['profileImage']['name']);
+    $uploadFile = $uploadDir . $uniqueName;
+
+    if (move_uploaded_file($_FILES['profileImage']['tmp_name'], $uploadFile)) {
+        $param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+        $query = "UPDATE users SET profile_image = ? WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("ss", $uploadFile, $param);
+
+        if ($stmt->execute()) {
+            $_SESSION['profile_image'] = $uploadFile;
+            echo "<script>alert('Profile image updated successfully.'); window.location.href = 'profile1.php';</script>";
+            exit;
+        } else {
+            echo "<script>alert('Database update failed.');</script>";
+        }
+        $stmt->close();
+    } else {
+        echo "<script>alert('File upload failed.');</script>";
+    }
+}
+
+// Fetch user info
+$user = null;
+$param = !empty($_SESSION['enrollment_id']) ? $_SESSION['enrollment_id'] : $_SESSION['email'];
+$query = "SELECT fname, email, enrollment_id, profile_image, phone FROM users WHERE " . (!empty($_SESSION['enrollment_id']) ? "enrollment_id = ?" : "email = ?");
+
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $param);
+
+if ($stmt->execute()) {
+    $result = $stmt->get_result();
+    if ($result && $result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        $_SESSION['profile_image'] = $user['profile_image'];
+    }
+}
+$stmt->close();
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -79,7 +141,7 @@ window.onload = updateStreak;
     </script>
 </head>
 
-<body>
+<body class="<?php echo isset($_SESSION['theme']) && $_SESSION['theme'] === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-white text-black'; ?>">
     <!-- Navbar -->
     <nav class="flex justify-between h-18 bg-white p-4 text-black shadow-lg text-center text-lg font-semibold">
         <div class="flex items-center">
@@ -92,22 +154,25 @@ window.onload = updateStreak;
             <li><a href="result.php">Results</a></li>
             <li><a href="contact1.php">Contact</a></li>
         </ul>
+        
         <div class="relative flex items-center text-center">
-            <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown"
-                data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="Logo.png"
-                alt="User dropdown">
-            <p id="userName">Amrit Raj</p>
+        <img id="avatarButton" type="button" data-dropdown-toggle="userDropdown" data-dropdown-placement="bottom-start" class="w-10 h-10 rounded-full cursor-pointer mr-2" src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'user-avtar-modified.png'; ?>" alt="User dropdown">
+
+        <p id="userName" name="name"><?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?></p>
+
             <div id="userDropdown"
                 class="z-10 hidden absolute mt-55 mr-10 right-0 bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700 dark:divide-gray-600">
                 <div class="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                    <div id="userEmail" class="font-medium truncate">Amrit@xyz.com</div>
+                <div id="userEmail" class="font-medium truncate" name="email">
+                        <?php echo isset($user) ? htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8') : 'Not logged in'; ?>
+                    </div>
                 </div>
                 <div class="py-2 text-sm text-gray-700 dark:text-gray-200" aria-labelledby="avatarButton">
                     <a href="profile1.php"
                         class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Profile</a>
                 </div>
                 <div class="py-1 flex justify-center items-center">
-                    <a href="#"
+                    <a href="index.php"
                         class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">Logout</a>
                     <img src="logout.png" alt="logout" class="w-6 h-6 ml-2">
                 </div>
@@ -127,6 +192,16 @@ window.onload = updateStreak;
                 dropdown.classList.add('hidden');
             }
         });
+        function toggleTheme(el) {
+    const theme = el.checked ? 'dark' : 'light';
+    fetch('theme-toggle.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'theme=' + theme
+    }).then(() => {
+        location.reload(); // Reload to apply the theme
+    });
+}
         </script>
     </nav>
 
@@ -139,46 +214,65 @@ window.onload = updateStreak;
             <link rel="stylesheet" href="output.css">
         </head>
 
-        <body>
+        <body class="<?php echo isset($_SESSION['theme']) && $_SESSION['theme'] === 'dark' ? 'dark bg-gray-900 text-white' : 'bg-white text-black'; ?>">
             <div class="flex ">
 
-                <div
-                    class=" transition-transform duration-300 hover:scale-105 hover:z-10  ml-15 mt-10 rounded-xl border-white border-2 shadow-2xl shadow-gray-400 h-[14cm] w-[10cm] ">
-                    <a href="abc" class="text-lg text-blue-800 font-bold flex justify-end mr-5 mt-5 hover:underline">Edit</a>
+            <div class=" transition-transform duration-300 hover:scale-105 hover:z-10  ml-15 mt-10 rounded-xl border-white border-2 shadow-2xl shadow-gray-400 h-[14cm] w-[10cm] ">
+                    
                     <div class="pl-[3cm]">
-                        <img src="User.png" class="rounded-full mt-4 size-35 ring-3 ring-gray-300 mb-4">
-                        <label class="text-sm cursor-pointer bg-blue-500 text-white px-2 py-2 ml-5 relative rounded-md hover:bg-blue-600">
-                            Upload Image
-                            <input type="file" id="imageUpload" accept="image/*" class="hidden">
-                          </label>
+                        <!-- Profile Image Display -->
+                        <img id="profileImage"
+                            src="<?php echo isset($_SESSION['profile_image']) ? htmlspecialchars($_SESSION['profile_image'], ENT_QUOTES, 'UTF-8') : 'default-profile.png'; ?>"
+                            class="rounded-full mt-4 size-35 ring-3 ring-gray-300 mb-4" alt="">
+
+                        <!-- Working Upload Form -->
+                        <form action="profile1.php" method="POST" enctype="multipart/form-data">
+                            <label
+                                class="text-sm cursor-pointer bg-blue-500 text-white px-2 py-2 ml-5 relative rounded-md hover:bg-blue-600">
+                                Upload Image
+                                <input type="file" name="profileImage" accept="image/*" class="hidden"
+                                    onchange="this.form.submit()">
+                            </label>
+                        </form>
                     </div>
                     <br>
-                    <div class="font-bold text-xl text-center">
-                        Amrit Raj<br>
+                    <div class="font-bold text-xl mt-5 text-center">
+                        <p id="userName" name="name">
+                            <?php echo isset($user) ? htmlspecialchars($user['fname'], ENT_QUOTES, 'UTF-8') : 'Guest'; ?>
+                        </p>
+                        <br>
                     </div>
-                    <div class="text-center">
-                        Student at XYZ University<br>
-                    </div>
-                    <div class="flex space-x-2 ml-23 mt-5">
-                        <img src="identity.png" class="size-5">
-                        <p>Student ID:1235639</p>
-                       
-                    </div>
-                   
-                        <div class="flex space-x-2 pl-23 mt-5">
+                    <div class="ml-15 mt-2">
+                        <div class="flex space-x-2">
+                            <img src="University.png" class="size-5">
+                            Student at XYZ University<br>
+                        </div>
+                        <div class="flex space-x-2 mt-5">
+                            <img src="identity.png" class="size-5">
+                            <p>Enrollment ID:
+                                <?php echo isset($user) ? htmlspecialchars($_SESSION['enrollment_id'], ENT_QUOTES, 'UTF-8') : 'N/A'; ?>
+                            </p>
+
+                        </div>
+
+                        <div class="flex space-x-2  mt-5">
                             <img src="phone-call.png" class="size-5">
-                            <p class="text-center">Mob: +9194*****61</p>
+                            <p class="text-center">Mob: 
+                                <?php echo isset($user) ? htmlspecialchars($user['phone'], ENT_QUOTES, 'UTF-8') : 'N/A'; ?>
+                            </p>
                         </div>
-                        <div class="flex space-x-2 pl-23 mt-5">
+                        <div class="flex space-x-2  mt-5">
                             <img src="email.png" class="size-5">
-                            <p class="text-center">Email: amrit@gmail.com</p>
+                            <p class="text-center">Email: 
+                                <?php echo isset($user) ? htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8') : 'N/A'; ?>
+                            </p>
                         </div>
-                        <div class="flex space-x-2 pl-23 mt-5">
+                        <div class="flex space-x-2  mt-5">
                             <img src="calendar.png" class="size-5">
                             <p class="text-center">DOB: 07-04-2004</p>
                         </div>
-                    <br>
-                    
+                        <br>
+                    </div>
 
                 </div>
                 <div>
@@ -193,7 +287,7 @@ window.onload = updateStreak;
                             
                             <div class="flex space-x-2">
                                 <a href="profile1.php" class="text-sm">Preference & Settings</a>
-                                <img src="settings1.png" onclick="" class="size-5">
+                                <img src="settings.png" onclick="" class="size-5">
                             </div>
                         </div>
                     </div>
@@ -203,14 +297,23 @@ window.onload = updateStreak;
                         <div class="max-w-md mx-auto p-6 rounded-xl shadow-2xl  shadow-gray-500  transition-transform duration-300 hover:scale-105 hover:z-10">
                             <h2 class="text-2xl font-semibold mb-4">Preferences & Settings</h2>
                             
-                            <div class="mb-4">
+                            <div class="mb-4 flex space-x-10">
                                 <label for="language" class="block font-medium">Language Preferences:</label>
-                                <select id="language" class="w-full p-2 border border-gray-200 rounded mt-1 cursor-pointer">
+                                <select id="language" class="w-1/2 p-2 border border-gray-200 rounded mt-1 cursor-pointer">
                                     <option value="english">English</option>
                                     <option value="hindi">Hindi</option>
                                     <option value="spanish">Spanish</option>
                                     <option value="french">French</option>
                                 </select>
+                                <div class="flex items-center gap-2">
+                                <span>🌞</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" onchange="toggleTheme(this)" class="sr-only peer" <?php if (isset($_SESSION['theme']) && $_SESSION['theme'] === 'dark') echo 'checked'; ?>>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer dark:bg-gray-700 peer-checked:bg-blue-600"></div>
+                                    <div class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-5"></div>
+                                </label>
+                                <span>🌙</span>
+                            </div>
                             </div>
                             
                             <div class="mb-4">
